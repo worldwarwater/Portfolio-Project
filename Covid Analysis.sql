@@ -1,4 +1,4 @@
-/*
+
 -- Covid 19 Data Exploration 
 
 Skills: Joins, CTE's, Temporary Tables, -- add more
