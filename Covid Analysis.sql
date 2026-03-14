@@ -1,11 +1,19 @@
+/*
+=============================================================================
+  COVID-19 Global Data Exploration
+  Author: Stephen Drani
+  Tools: Microsoft SQL Server, SSMS
+  Skills: Joins, CTEs, Temporary Tables, Window Functions, Aggregate Functions,
+          Data Type Conversions, Views
+  Data Source: https://ourworldindata.org/covid-deaths
+=============================================================================
+*/
 
--- Covid 19 Data Exploration 
-
-Skills: Joins, CTE's, Temporary Tables, -- add more
-
---Looking at total_cases(1) vs total_deaths(2)
-
-slight issues in the writing of the syntax wouldn't first allow for simple 2/1 when the numerator was smaller than the denominator that is why Nullif was used -- could have been solved in the data cleaning process
+-- ==========================================================================
+-- 1. Total Cases vs Total Deaths (Global)
+-- Shows the likelihood of dying if you contract COVID in each country
+-- Note: NULLIF prevents division by zero errors
+-- ==========================================================================
 
 SELECT
     [location],
@@ -15,13 +23,17 @@ SELECT
     [total_deaths],
     [population],
     CAST([total_deaths] AS FLOAT) / NULLIF([total_cases], 0) * 100 AS DeathPercentage
-FROM 
+FROM
     [dbo].[covid-Deaths]
-ORDER BY 
-    [location], [date]; 
+ORDER BY
+    [location], [date];
 
--- Total Death vs Total cases as DeatPercentage for U.S
-SELECT 
+-- ==========================================================================
+-- 2. Death Percentage in the United States
+-- Shows the probability of death after contracting COVID in the U.S. over time
+-- ==========================================================================
+
+SELECT
     [location],
     [date],
     [total_cases],
@@ -30,38 +42,50 @@ SELECT
     [population],
     CAST([total_deaths] AS FLOAT) / NULLIF([total_cases], 0) * 100 AS DeathPercentage
 FROM
-[dbo].[covid-Deaths]
-where
-[location]= 'United States' 
---Total Cases vs Population as PercentPopulationInfected
-SELECT 
+    [dbo].[covid-Deaths]
+WHERE
+    [location] = 'United States';
+
+-- ==========================================================================
+-- 3. Total Cases vs Population
+-- Shows what percentage of each country's population has been infected
+-- ==========================================================================
+
+SELECT
     [location],
     [population],
     MAX([total_cases]) AS HighestInfectionCount,
     MAX([total_cases] * 1.0 / [population] * 100) AS PercentPopulationInfected
 FROM
     [dbo].[covid-Deaths]
-Group by [location], [population]
-order by 
-    [PercentPopulationInfected] Desc
+GROUP BY
+    [location], [population]
+ORDER BY
+    [PercentPopulationInfected] DESC;
 
--- Highest Death count per Continent 
+-- ==========================================================================
+-- 4. Highest Death Count per Continent
+-- Ranks continents by total COVID deaths
+-- ==========================================================================
 
-SELECT 
+SELECT
     [continent],
     MAX([total_deaths]) AS TotalDeathCount
 FROM
     [dbo].[covid-Deaths]
-where [continent] is not NULL
-Group by 
+WHERE
+    [continent] IS NOT NULL
+GROUP BY
     [continent]
-order by 
-    [TotalDeathCount] Desc;
+ORDER BY
+    [TotalDeathCount] DESC;
 
---Finding Death Percantage using TotalDeats / TotalnewCases
+-- ==========================================================================
+-- 5. Global Death Percentage
+-- Calculates the overall global death rate from new cases and new deaths
+-- ==========================================================================
 
-  SELECT 
-    --[date],
+SELECT
     SUM([new_cases]) AS TotalNewCases,
     SUM([new_deaths]) AS TotalDeaths,
     (SUM([new_deaths]) * 1.0 / NULLIF(SUM([new_cases]), 0)) * 100 AS DeathPercentage
@@ -69,59 +93,18 @@ FROM
     [dbo].[covid-Deaths]
 WHERE
     [continent] IS NOT NULL
---GROUP BY 
- --   [date]
-ORDER BY 
-    1,2;
- 
-SELECT 
-    cd.[continent],
-    cd.[location],
-    cd.[date],
-    cd.[population],
-    vac.[new_vaccinations],
-    SUM(vac.[new_vaccinations]) OVER (Partition by cd.[location] order by cd.[location], cd.[date])
-     as RollingPeopleVaccinated,
-     (RollingPeopleVaccinated/[population])
-FROM
-    [dbo].[covid-Deaths] AS cd
-Join
-    [dbo].[covid-Vaccination] as vac 
-    ON cd.location = vac.location
-   AND cd.date = vac.date
-where
-    cd.[continent] is not NULL
-order by 2,3
--- Use CTE
+ORDER BY
+    1, 2;
 
-With PopvsVac ([continent],[location],[date],[population],[new_vaccinations], RollingPeopleVaccinated) AS
-(
-SELECT 
-    cd.[continent],
-    cd.[location],
-    cd.[date],
-    cd.[population],
-    vac.[new_vaccinations],
-    SUM(vac.[new_vaccinations]) OVER (Partition by cd.[location] order by cd.[location], cd.[date])
-     as RollingPeopleVaccinated,
-     (RollingPeopleVaccinated/[population]) * 100
-FROM
-    [dbo].[covid-Deaths] AS cd
-Join
-    [dbo].[covid-Vaccination] as vac 
-    ON cd.location = vac.location
-   AND cd.date = vac.date
-where
-    cd.[continent] is not NULL
---order by 2,3
-)
-SELECT *
-From PopvsVac
+-- ==========================================================================
+-- 6. Rolling Vaccination Count Using CTE
+-- Calculates a running total of vaccinations per country and the
+-- percentage of the population vaccinated over time
+-- ==========================================================================
 
--- Looking at Total Population vs Vaccinations -- creating temporary tables to first find RollingPeopleVaccainated then using the to find the VaccinationPercentage
 WITH PopvsVac ([continent], [location], [date], [population], [new_vaccinations], RollingPeopleVaccinated, VaccinationPercentage) AS
 (
-    SELECT 
+    SELECT
         cd.[continent],
         cd.[location],
         cd.[date],
@@ -132,7 +115,7 @@ WITH PopvsVac ([continent], [location], [date], [population], [new_vaccinations]
     FROM
         [dbo].[covid-Deaths] AS cd
     JOIN
-        [dbo].[covid-Vaccination] AS vac 
+        [dbo].[covid-Vaccination] AS vac
         ON cd.location = vac.location
        AND cd.date = vac.date
     WHERE
@@ -141,13 +124,14 @@ WITH PopvsVac ([continent], [location], [date], [population], [new_vaccinations]
 SELECT *
 FROM PopvsVac;
 
+-- ==========================================================================
+-- 7. Rolling Vaccination Count Using Temporary Table
+-- Same analysis as above but using a temp table approach for flexibility
+-- ==========================================================================
 
-*/
--- Check if the temporary table exists and drop it if it does
 IF OBJECT_ID('tempdb..#PercentPopulationsVaccinated') IS NOT NULL
     DROP TABLE #PercentPopulationsVaccinated;
 
--- Create the temporary table
 CREATE TABLE #PercentPopulationsVaccinated(
     [continent] NVARCHAR(255),
     [location] NVARCHAR(255),
@@ -158,7 +142,6 @@ CREATE TABLE #PercentPopulationsVaccinated(
     [VaccinationPercentage] NUMERIC(18, 2)
 );
 
--- Insert the data into the temporary table
 INSERT INTO #PercentPopulationsVaccinated (
     [continent],
     [location],
@@ -168,7 +151,7 @@ INSERT INTO #PercentPopulationsVaccinated (
     [RollingPeopleVaccinated],
     [VaccinationPercentage]
 )
-SELECT 
+SELECT
     cd.[continent],
     cd.[location],
     cd.[date],
@@ -179,18 +162,22 @@ SELECT
 FROM
     [dbo].[covid-Deaths] AS cd
 JOIN
-    [dbo].[covid-Vaccination] AS vac 
+    [dbo].[covid-Vaccination] AS vac
     ON cd.location = vac.location
    AND cd.date = vac.date
 WHERE
     cd.[continent] IS NOT NULL;
 
--- Optional: Select data from the temporary table to verify results
 SELECT * FROM #PercentPopulationsVaccinated;
 
+-- ==========================================================================
+-- 8. Create View for Visualization Layer
+-- Stores the vaccination progress query as a reusable view
+-- for connecting to Tableau or Power BI
+-- ==========================================================================
 
-Create View PercentPopulationsVaccinated as 
-Select
+CREATE VIEW PercentPopulationsVaccinated AS
+SELECT
     cd.[continent],
     cd.[location],
     cd.[date],
@@ -201,9 +188,8 @@ Select
 FROM
     [dbo].[covid-Deaths] AS cd
 JOIN
-    [dbo].[covid-Vaccination] AS vac 
+    [dbo].[covid-Vaccination] AS vac
     ON cd.location = vac.location
    AND cd.date = vac.date
 WHERE
-    cd.[continent] IS NOT NULL; */
-    
+    cd.[continent] IS NOT NULL;
